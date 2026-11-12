@@ -9,12 +9,12 @@ Uint8List seg(int marker, List<int> payload) =>
     Uint8List.fromList([0xFF, marker, (payload.length + 2) >> 8, (payload.length + 2) & 0xFF, ...payload]);
 
 Uint8List jpeg(List<Uint8List> appSegments) => Uint8List.fromList([
-      0xFF, 0xD8,
-      for (final s in appSegments) ...s,
-      ...seg(0xDB, List.filled(10, 1)), // DQT
-      0xFF, 0xDA, 0x00, 0x02, 1, 2, 3, // SOS + data
-      0xFF, 0xD9,
-    ]);
+  0xFF, 0xD8,
+  for (final s in appSegments) ...s,
+  ...seg(0xDB, List.filled(10, 1)), // DQT
+  0xFF, 0xDA, 0x00, 0x02, 1, 2, 3, // SOS + data
+  0xFF, 0xD9,
+]);
 
 String xmpOf(Uint8List b) {
   final s = latin1.decode(b);
@@ -51,11 +51,14 @@ void main() {
   });
 
   test('merges into existing XMP without dropping other descriptions, and re-run replaces', () {
-    const existing = '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/">'
+    const existing =
+        '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/">'
         '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
         '<rdf:Description rdf:about="" xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" GCamera:MotionPhoto="1"/>'
         '</rdf:RDF></x:xmpmeta><?xpacket end="w"?>';
-    final src = jpeg([seg(0xE1, [...latin1.encode('http://ns.adobe.com/xap/1.0/\u0000'), ...utf8.encode(existing)])]);
+    final src = jpeg([
+      seg(0xE1, [...latin1.encode('http://ns.adobe.com/xap/1.0/\u0000'), ...utf8.encode(existing)]),
+    ]);
     final once = embedXmpInJpegBytes(src, meta)!;
     final twice = embedXmpInJpegBytes(once, meta)!;
     final x = xmpOf(twice);

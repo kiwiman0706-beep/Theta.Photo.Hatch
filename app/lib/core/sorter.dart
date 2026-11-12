@@ -4,9 +4,11 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'camera_hatch.dart';
 import 'models.dart';
 import 'naming.dart';
 import 'native.dart';
+import 'settings.dart';
 import 'xmp.dart';
 
 class SortRequest {
@@ -40,7 +42,30 @@ class Sorter {
     return dir;
   }
 
-  static Future<SortResult> run(List<MediaItem> items, SortRequest req) async {
+  static Future<File> _processedFile() async {
+    final dir = await getApplicationSupportDirectory();
+    return File(p.join(dir.path, 'processed.json'));
+  }
+
+  /// Camera の写真を「コピー」で仕分けた物（元は Camera のフォルダに残る）。未処理の一覧から外す
+  static Future<Set<String>> processed() async {
+    final f = await _processedFile();
+    if (!f.existsSync()) return {};
+    try {
+      return (jsonDecode(await f.readAsString()) as List).cast<String>().toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> _saveProcessed(Set<String> s) async =>
+      (await _processedFile()).writeAsString(jsonEncode(s.toList()), flush: true);
+
+  static Future<SortResult> run(
+    List<MediaItem> items,
+    SortRequest req, {
+    CameraMode cameraMode = CameraMode.move,
+  }) async {
     final root = await NativeBridge.storageRoot();
     final cat = req.category;
     final targetDir = cat == null ? await trashDir() : p.join(root, 'Pictures', cat.folder);
@@ -51,12 +76,24 @@ class Sorter {
     final log = <Map<String, dynamic>>[];
     final errors = <String>[];
 
+    final processedSet = await processed();
     for (final item in items) {
       try {
-        final name = cat == null ? item.name : hatchFileName(item.takenAt, item.name, event: req.event);
+        // Theta Camera Hatch の写真：撮影時のイベント・☆・タグ・コメントを引き継ぐ
+        final camera = isCameraHatch(item.relativePath);
+        final cs = camera ? cameraSidecars(root, item.relativePath, item.name) : null;
+        final cam = cs == null ? null : await readCameraSidecar(cs.json, cs.xmp);
+        final event = req.event ?? cam?.meta.event;
+        final copy = camera && cat != null && cameraMode == CameraMode.copy;
+
+        final name = cat == null ? item.name : hatchFileName(item.takenAt, item.name, event: event);
         final dest = uniquePath(targetDir, name, (s) => File(s).existsSync());
-        await _move(item.path, dest);
-        String? sidecar;
+        if (copy) {
+          await File(item.path).copy(dest);
+        } else {
+          await _move(item.path, dest);
+        }
+        String? sidecar, cameraJson;
         if (cat != null) {
           sidecar = await writeMetadata(
             dest,
@@ -64,21 +101,34 @@ class Sorter {
               categoryId: cat.id,
               categoryLabel: cat.label,
               processedAt: batch,
-              event: req.event,
-              starred: req.starred,
-              keywords: req.keywords,
+              event: event,
+              starred: req.starred || (cam?.meta.favorite ?? false),
+              keywords: {...req.keywords, ...?cam?.meta.tags}.toList(),
               originalName: item.name,
+              comment: cam?.meta.comment ?? '',
             ),
           );
+          // Camera の theta.capture/1 も写真の隣へ（名前を合わせ、知らない項目は残す）。
+          // Camera 側の元のサイドカーは消さない（元に戻すとき・Camera の索引のため）
+          if (cam?.rawJson != null) {
+            final j = Map<String, dynamic>.from(cam!.rawJson!)..['media'] = p.basename(dest);
+            cameraJson = '${p.withoutExtension(dest)}.theta.json';
+            await File(cameraJson).writeAsString(const JsonEncoder.withIndent('  ').convert(j), flush: true);
+          }
         }
-        scan
-          ..add(item.path)
-          ..add(dest);
+        if (copy) {
+          processedSet.add(item.path);
+        } else {
+          scan.add(item.path);
+        }
+        scan.add(dest);
         log.add({
           'batch': batch.toIso8601String(),
           'from': item.path,
           'to': dest,
+          'copied': copy,
           'sidecar': sidecar,
+          'cameraJson': cameraJson,
           'category': cat?.id ?? 'trash',
           'event': req.event,
           'starred': req.starred,
@@ -91,6 +141,7 @@ class Sorter {
 
     final j = await _journal();
     await j.writeAsString(log.map((e) => '${jsonEncode(e)}\n').join(), mode: FileMode.append, flush: true);
+    await _saveProcessed(processedSet);
     await NativeBridge.scanFiles(scan);
     return SortResult(log.length, errors);
   }
@@ -114,17 +165,26 @@ class Sorter {
     final last = entries.last['batch'];
     final undo = entries.where((e) => e['batch'] == last).toList();
     final scan = <String>[];
+    final processedSet = await processed();
     for (final e in undo) {
       final to = e['to'] as String, from = e['from'] as String;
-      if (File(to).existsSync() && !File(from).existsSync()) {
+      if (e['copied'] == true) {
+        // コピーで仕分けた物：コピーを消し、元を未処理に戻す
+        if (File(to).existsSync() && File(from).existsSync()) await File(to).delete();
+        processedSet.remove(from);
+        scan.add(to);
+      } else if (File(to).existsSync() && !File(from).existsSync()) {
         await _move(to, from);
         scan
           ..add(to)
           ..add(from);
       }
-      final sc = e['sidecar'] as String?;
-      if (sc != null && File(sc).existsSync()) await File(sc).delete();
+      for (final k in ['sidecar', 'cameraJson']) {
+        final sc = e[k] as String?;
+        if (sc != null && File(sc).existsSync()) await File(sc).delete();
+      }
     }
+    await _saveProcessed(processedSet);
     final keep = entries.where((e) => e['batch'] != last).map((e) => '${jsonEncode(e)}\n').join();
     await j.writeAsString(keep, flush: true);
     await NativeBridge.scanFiles(scan);

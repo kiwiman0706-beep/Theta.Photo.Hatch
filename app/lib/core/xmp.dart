@@ -12,6 +12,7 @@ class HatchMeta {
     this.starred = false,
     this.keywords = const [],
     this.originalName,
+    this.comment = '',
   });
 
   final String categoryId;
@@ -21,9 +22,14 @@ class HatchMeta {
   final bool starred;
   final List<String> keywords;
   final String? originalName;
+
+  /// 自分の言葉の説明（Camera Hatch のコメント）。dc:description
+  final String comment;
 }
 
-const hatchNs = 'http://ns.theta.photo/hatch/1.0/';
+/// Hatch 独自の項目（分類・処理日時）の名前空間。0.1.0 は `http://ns.theta.photo/hatch/1.0/`（読むときは両方）
+const hatchNs = 'https://thetahatch.app/ns/photo/1.0/';
+const hatchNsV010 = 'http://ns.theta.photo/hatch/1.0/';
 const _xmpHeader = 'http://ns.adobe.com/xap/1.0/\u0000';
 const _extXmpHeader = 'http://ns.adobe.com/xmp/extension/\u0000';
 
@@ -58,6 +64,13 @@ String buildDescription(HatchMeta m) {
       '<Iptc4xmpExt:Event><rdf:Alt>'
       '<rdf:li xml:lang="x-default">${_esc(m.event!)}</rdf:li>'
       '</rdf:Alt></Iptc4xmpExt:Event>',
+    );
+  }
+  if (m.comment.isNotEmpty) {
+    body.write(
+      '<dc:description><rdf:Alt>'
+      '<rdf:li xml:lang="x-default">${_esc(m.comment)}</rdf:li>'
+      '</rdf:Alt></dc:description>',
     );
   }
   return '<rdf:Description ${attrs.join(' ')}>$body</rdf:Description>';
@@ -161,3 +174,31 @@ Future<String?> writeMetadata(String path, HatchMeta m) async {
   await File(sidecar).writeAsString(buildPacket(m), flush: true);
   return sidecar;
 }
+
+/// 写真に付いた Hatch の XMP からイベント名を読む（JPEG は中、ほかは同じ名前の .xmp）
+Future<String?> readEvent(String path) async {
+  String? text;
+  final dot = path.lastIndexOf('.');
+  final sidecar = File('${dot > 0 ? path.substring(0, dot) : path}.xmp');
+  if (sidecar.existsSync()) {
+    text = await sidecar.readAsString();
+  } else if (isJpeg(path)) {
+    final f = await File(path).open();
+    try {
+      text = utf8.decode(await f.read(256 * 1024), allowMalformed: true);
+    } finally {
+      await f.close();
+    }
+  }
+  if (text == null) return null;
+  final m = RegExp(r'<Iptc4xmpExt:Event>[\s\S]*?<rdf:li[^>]*>([^<]*)</rdf:li>').firstMatch(text);
+  final v = m?.group(1);
+  return v == null ? null : _unesc(v);
+}
+
+String _unesc(String s) => s
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&amp;', '&');

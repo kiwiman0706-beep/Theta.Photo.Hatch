@@ -1,0 +1,103 @@
+# Release（Theta.Hatch.Series spec §6.1）：版を上げて main に push すると、タグ v<版> と GitHub Release を自動で作る。
+# 手でも動かせる（Actions → Release → Run workflow。同じ版なら APK を差し替える）。
+# テスト → シリーズ共通の鍵で署名（Secret 4 つ：ANDROID_KEYSTORE_B64・ANDROID_KEYSTORE_PASSWORD・
+# ANDROID_KEY_ALIAS・ANDROID_KEY_PASSWORD。secrets/README.md）→ ハブが確かめる項目（パッケージ名・版・鍵）を確認。
+# Release の APK は 1 つ：ThetaPhotoHatch-<版>.apk（と SHA256SUMS-<版>.txt）。本文は docs/releases/v<版>.md（リポジトリ直下の docs）。
+# Flutter のプロジェクトは app/ にある。
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    env:
+      PACKAGE: app.thetahatch.photo
+      CERT_SHA256: f47740d8549bc1c37feb00b18780d80b52758b60252ba0d2217d83ab3f012a23
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        name: 版・本文・すでに出したか
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(sed -n 's/^version: *\([^+ ]*\).*/\1/p' pubspec.yaml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" > /dev/null 2>&1; then
+            # 版を上げていない push：出すものは無い。手で動かしたときは APK を差し替える
+            if [ "$GITHUB_EVENT_NAME" = push ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; echo "v$version は出し済み"; exit 0; fi
+          fi
+          test -f "../docs/releases/v$version.md" || { echo "::error::docs/releases/v$version.md がありません"; exit 1; }
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+      - if: steps.v.outputs.skip == 'false'
+        uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - if: steps.v.outputs.skip == 'false'
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.8'
+          channel: stable
+          cache: true
+      - if: steps.v.outputs.skip == 'false'
+        name: テスト
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+      - if: steps.v.outputs.skip == 'false'
+        name: 署名した APK
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then
+            echo "::error::シリーズの Secret（ANDROID_KEYSTORE_B64・ANDROID_KEYSTORE_PASSWORD・ANDROID_KEY_ALIAS・ANDROID_KEY_PASSWORD）がありません。Theta.Hatch.Series の tools/sync-secrets で配ってください"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/signing"
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/signing/release.jks"
+          SIGNING_FILE="$RUNNER_TEMP/signing/release.jks" flutter build apk --release
+          rm -rf "$RUNNER_TEMP/signing"
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/ThetaPhotoHatch-${{ steps.v.outputs.version }}.apk"
+      - if: steps.v.outputs.skip == 'false'
+        name: ハブが確かめる項目（パッケージ名・版・シリーズの鍵）
+        run: |
+          ver="${{ steps.v.outputs.version }}"
+          apk="dist/ThetaPhotoHatch-$ver.apk"
+          bt="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$bt/aapt2" dump badging "$apk" | grep -q "package: name='$PACKAGE'" || { echo "::error::アプリ ID が $PACKAGE ではありません"; exit 1; }
+          "$bt/aapt2" dump badging "$apk" | grep -q "versionName='$ver'" || { echo "::error::APK の版が $ver ではありません"; exit 1; }
+          "$bt/apksigner" verify --print-certs "$apk" | grep -qi "SHA-256 digest: $CERT_SHA256" || { echo "::error::シリーズ共通の鍵で署名されていません"; exit 1; }
+          (cd dist && sha256sum "ThetaPhotoHatch-$ver.apk" > "SHA256SUMS-$ver.txt" && cat "SHA256SUMS-$ver.txt")
+      - if: steps.v.outputs.skip == 'false'
+        name: 公開
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${{ steps.v.outputs.version }}"
+          files="dist/ThetaPhotoHatch-$ver.apk dist/SHA256SUMS-$ver.txt"
+          if gh release view "v$ver" > /dev/null 2>&1; then
+            gh release upload "v$ver" $files --clobber
+          else
+            # 「-」の付いた版（1.0.0-beta）は prerelease。ハブは入れない
+            pre=""
+            case "$ver" in *-*) pre="--prerelease";; esac
+            gh release create "v$ver" $files --target "$GITHUB_SHA" --title "Theta Photo Hatch $ver" --notes-file "../docs/releases/v$ver.md" $pre
+          fi

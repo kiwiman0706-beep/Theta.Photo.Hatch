@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../core/camera_hatch.dart';
 import '../core/models.dart';
 import '../core/native.dart';
 
@@ -56,6 +57,19 @@ class MediaThumb extends StatelessWidget {
               left: 4,
               bottom: 4,
               child: Icon(Icons.play_circle_fill, color: Colors.white, size: 20, shadows: [Shadow(blurRadius: 4)]),
+            ),
+          if (item.maybePanorama || isCameraHatch(item.relativePath))
+            Positioned(
+              left: 4,
+              top: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                color: Colors.black54,
+                child: Text(
+                  item.maybePanorama ? '360°' : 'CAM',
+                  style: const TextStyle(color: Colors.white, fontSize: 10, fontFamily: 'ShareTechMono'),
+                ),
+              ),
             ),
           if (selected) Positioned(right: 4, top: 4, child: Icon(Icons.check_circle, color: scheme.primary, size: 24)),
         ],

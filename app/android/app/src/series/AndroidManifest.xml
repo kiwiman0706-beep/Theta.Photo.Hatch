@@ -1,0 +1,7 @@
+<!-- 共通鍵（シリーズの署名）でビルドするときだけ足す（build.gradle.kts）。
+     デバッグ鍵の APK に入れると、同じ権限を定義している Home（共通鍵）とぶつかって入らないため -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <permission
+        android:name="app.thetahatch.permission.SHARE"
+        android:protectionLevel="signature" />
+</manifest>

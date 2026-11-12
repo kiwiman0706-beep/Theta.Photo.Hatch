@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "photo.theta" "\0"
-            VALUE "FileDescription", "theta_photo_hatch" "\0"
+            VALUE "CompanyName", "Theta Hatch" "\0"
+            VALUE "FileDescription", "Theta Photo Hatch" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "theta_photo_hatch" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 photo.theta. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Theta Hatch. All rights reserved." "\0"
             VALUE "OriginalFilename", "theta_photo_hatch.exe" "\0"
-            VALUE "ProductName", "theta_photo_hatch" "\0"
+            VALUE "ProductName", "Theta Photo Hatch" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

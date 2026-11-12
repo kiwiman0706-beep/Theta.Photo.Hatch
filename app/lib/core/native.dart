@@ -11,8 +11,12 @@ class NativeBridge {
 
   static Future<String> storageRoot() async => (await _ch.invokeMethod<String>('storageRoot')) ?? '/storage/emulated/0';
 
-  static Future<List<MediaItem>> listMedia(List<String> relativePaths) async {
-    final raw = await _ch.invokeListMethod<Map<dynamic, dynamic>>('listMedia', {'relativePaths': relativePaths});
+  /// prefix が true なら、下のフォルダ（DCIM/ThetaCamera/<フォルダ>/ など）も含める
+  static Future<List<MediaItem>> listMedia(List<String> relativePaths, {bool prefix = false}) async {
+    final raw = await _ch.invokeListMethod<Map<dynamic, dynamic>>('listMedia', {
+      'relativePaths': relativePaths,
+      'prefix': prefix,
+    });
     return (raw ?? []).map(MediaItem.fromMap).toList();
   }
 
@@ -21,4 +25,17 @@ class NativeBridge {
 
   static Future<void> scanFiles(List<String> paths) =>
       _ch.invokeMethod('scanFiles', {'paths': paths}).timeout(const Duration(seconds: 30), onTimeout: () => null);
+
+  /// ビューア用に読む（HEIF・回転は OS に任せる）。bytes（JPEG）・width・height
+  static Future<({Uint8List bytes, int width, int height})?> decode(String path, {int max = 2560}) async {
+    final m = await _ch.invokeMapMethod<String, dynamic>('decode', {'path': path, 'max': max});
+    if (m == null) return null;
+    return (bytes: m['bytes'] as Uint8List, width: m['width'] as int, height: m['height'] as int);
+  }
+
+  /// Wi-Fi（か有線）で、従量制でない回線か
+  static Future<bool> isWifi() async => (await _ch.invokeMethod<bool>('isWifi')) ?? false;
+
+  /// ビューアとして開かれたときの写真のパス（無ければ null）
+  static Future<String?> viewIntent() => _ch.invokeMethod<String>('viewIntent');
 }

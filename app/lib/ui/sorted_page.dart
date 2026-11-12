@@ -6,6 +6,7 @@ import '../core/native.dart';
 import '../core/settings.dart';
 import '../core/sorter.dart';
 import 'media_grid.dart';
+import 'upload_page.dart';
 
 class SortedPage extends StatefulWidget {
   const SortedPage({super.key, required this.settings});
@@ -82,6 +83,15 @@ class _SortedPageState extends State<SortedPage> with WidgetsBindingObserver {
         child: ListView(
           children: [
             const _UploadGuide(),
+            ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.cloud_upload_outlined)),
+              title: const Text('NAS へ上げる（Wi-Fi）'),
+              subtitle: const Text('Synology の File Station へ直接。<年>/<日付 イベント>/ に並べます'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () =>
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => UploadPage(settings: widget.settings))),
+            ),
+            const Divider(),
             for (final c in cats)
               ListTile(
                 leading: CircleAvatar(
@@ -131,7 +141,9 @@ class _UploadGuide extends StatelessWidget {
             '② Synology Photos：バックアップ対象に「Hatch_」で始まるフォルダをすべて追加'
             '（カメラフォルダはオフ）\n'
             '③ みてね：下の各フォルダを開いて写真を選び、共有ボタン → みてね\n'
-            '④ アップロードが終わったら Synology Photos の「空き容量を確保」で端末から削除',
+            '④ アップロードが終わったら Synology Photos の「空き容量を確保」で端末から削除\n\n'
+            'Synology Photos のバックアップの代わりに、上の「NAS へ上げる」でこのアプリから直接上げることもできます'
+            '（年・日付・イベントのフォルダに並ぶ）。',
           ),
         ],
       ),

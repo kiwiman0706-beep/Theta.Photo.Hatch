@@ -8,7 +8,7 @@
 PRODUCT_NAME = theta_photo_hatch
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = photo.theta.thetaPhotoHatch
+PRODUCT_BUNDLE_IDENTIFIER = app.thetahatch.photo
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 photo.theta. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 Theta Hatch. All rights reserved.

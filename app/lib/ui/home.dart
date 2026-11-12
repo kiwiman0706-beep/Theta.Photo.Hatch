@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
+import '../core/camera_hatch.dart';
 import '../core/models.dart';
 import '../core/native.dart';
+import '../core/series.dart';
 import '../core/settings.dart';
 import '../core/sorter.dart';
 import 'media_grid.dart';
 import 'settings_page.dart';
 import 'sort_sheet.dart';
 import 'sorted_page.dart';
+import 'usb_page.dart';
+import 'viewer.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.settings});
@@ -42,6 +46,20 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   Future<void> _check() async {
     final g = await NativeBridge.hasAllFilesAccess();
     if (mounted && g != _granted) setState(() => _granted = g);
+    if (g) await _openViewIntent();
+    // シリーズのハブ（Home・KidsHome）の共通設定（スキン・NAS の接続先）を取り込む
+    final info = await Series.info();
+    if (widget.settings.applyHub(info)) await widget.settings.save();
+  }
+
+  String? _viewed;
+
+  /// ほかのアプリ（Camera Hatch のサムネイルなど）から「開く」で来たとき
+  Future<void> _openViewIntent() async {
+    final path = await NativeBridge.viewIntent();
+    if (path == null || path == _viewed || !mounted) return;
+    _viewed = path;
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ViewerPage(path: path)));
   }
 
   @override
@@ -137,7 +155,13 @@ class _InboxPageState extends State<InboxPage> with WidgetsBindingObserver {
   }
 
   Future<void> _reload() async {
-    final items = await NativeBridge.listMedia(widget.settings.sources);
+    final s = widget.settings;
+    final done = await Sorter.processed();
+    final sorted = {...s.categories.map((c) => c.relativePath), 'Pictures/$trashFolder/'};
+    final items = (await NativeBridge.listMedia(
+      s.sources,
+      prefix: true,
+    )).where((i) => !done.contains(i.path) && !sorted.contains(i.relativePath)).toList();
     items.sort((a, b) => b.takenAt.compareTo(a.takenAt));
     if (!mounted) return;
     setState(() {
@@ -149,15 +173,31 @@ class _InboxPageState extends State<InboxPage> with WidgetsBindingObserver {
 
   Future<void> _sort() async {
     final items = _items!.where((i) => _selected.contains(i.id)).toList();
+    // Theta Camera Hatch で撮ったもの：撮影時のイベントを初期値に（タグ・☆・コメントは仕分けで引き継ぐ）
+    final root = await NativeBridge.storageRoot();
+    final events = <String>{};
+    var cameraCount = 0;
+    for (final i in items.where((i) => isCameraHatch(i.relativePath))) {
+      cameraCount++;
+      final cs = cameraSidecars(root, i.relativePath, i.name);
+      final ev = (await readCameraSidecar(cs.json, cs.xmp))?.meta.event;
+      if (ev != null && ev.isNotEmpty) events.add(ev);
+    }
+    if (!mounted) return;
     final req = await showModalBottomSheet<SortRequest>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => SortSheet(settings: widget.settings, items: items),
+      builder: (_) => SortSheet(
+        settings: widget.settings,
+        items: items,
+        cameraCount: cameraCount,
+        initialEvent: events.length == 1 ? events.first : null,
+      ),
     );
     if (req == null || !mounted) return;
     setState(() => _busy = true);
-    final res = await Sorter.run(items, req);
+    final res = await Sorter.run(items, req, cameraMode: widget.settings.cameraMode);
     await widget.settings.remember(keywords: req.keywords, event: req.event);
     _selected = {};
     await _reload();
@@ -193,6 +233,14 @@ class _InboxPageState extends State<InboxPage> with WidgetsBindingObserver {
             ? IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _selected = {}))
             : null,
         actions: [
+          IconButton(
+            tooltip: 'USB から取り込む（カメラ・GoPro・THETA・カードリーダー）',
+            icon: const Icon(Icons.usb),
+            onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const UsbPage()));
+              _reload();
+            },
+          ),
           if (items != null && items.isNotEmpty)
             IconButton(
               tooltip: 'すべて選択',

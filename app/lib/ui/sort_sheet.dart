@@ -6,9 +6,13 @@ import '../core/settings.dart';
 import '../core/sorter.dart';
 
 class SortSheet extends StatefulWidget {
-  const SortSheet({super.key, required this.settings, required this.items});
+  const SortSheet({super.key, required this.settings, required this.items, this.cameraCount = 0, this.initialEvent});
   final AppSettings settings;
   final List<MediaItem> items;
+
+  /// Theta Camera Hatch で撮ったものの数と、撮影時のイベント（全部同じなら）
+  final int cameraCount;
+  final String? initialEvent;
 
   @override
   State<SortSheet> createState() => _SortSheetState();
@@ -25,6 +29,7 @@ class _SortSheetState extends State<SortSheet> {
   @override
   void initState() {
     super.initState();
+    _event.text = widget.initialEvent ?? '';
     _event.addListener(() => setState(() {}));
   }
 
@@ -54,6 +59,14 @@ class _SortSheetState extends State<SortSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('${widget.items.length}件を仕分け', style: t.titleLarge),
+            if (widget.cameraCount > 0) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Camera Hatch の ${widget.cameraCount} 件：撮影時のイベント・☆・タグ・コメントを引き継ぎます'
+                '（${s.cameraMode == CameraMode.copy ? 'Camera のフォルダに残してコピー' : '仕分け先へ移動'}。設定で変えられます）',
+                style: t.bodySmall,
+              ),
+            ],
             const SizedBox(height: 16),
             Text('分類（＝端末内の移動先フォルダ）', style: t.labelLarge),
             const SizedBox(height: 8),

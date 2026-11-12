@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../core/models.dart';
 import 'thumb.dart';
+import 'viewer.dart';
 
 /// 日付ごとに区切ったグリッド。サムネタップで選択、日付タップでその日を全選択/解除。
 class MediaGrid extends StatelessWidget {
@@ -77,42 +76,17 @@ class MediaGrid extends StatelessWidget {
                   next.contains(it.id) ? next.remove(it.id) : next.add(it.id);
                   onChanged(next);
                 },
-                onLongPress: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PreviewPage(item: it))),
+                onLongPress: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ViewerPage(path: it.path, item: it),
+                  ),
+                ),
               );
             },
           ),
         ],
         const SliverToBoxAdapter(child: SizedBox(height: 120)),
       ],
-    );
-  }
-}
-
-class PreviewPage extends StatelessWidget {
-  const PreviewPage({super.key, required this.item});
-  final MediaItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(item.name, style: const TextStyle(fontSize: 14)),
-      ),
-      body: Center(
-        child: item.isVideo
-            ? Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(width: 240, height: 240, child: MediaThumb(item: item, selected: false)),
-                  const SizedBox(height: 12),
-                  const Text('動画（プレビューはサムネイルのみ）', style: TextStyle(color: Colors.white70)),
-                ],
-              )
-            : InteractiveViewer(maxScale: 6, child: Image.file(File(item.path), cacheWidth: 2000)),
-      ),
     );
   }
 }

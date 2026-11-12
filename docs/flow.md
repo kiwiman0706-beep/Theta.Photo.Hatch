@@ -1,4 +1,4 @@
-# Theta.Photo.Hatch — 運用フロー（Android 版 v0.1）
+# Theta Photo Hatch — 運用フロー（Android 版）
 
 ## 全体の流れ
 
@@ -56,9 +56,25 @@ NAS に上がった後でイベントフォルダ（`2026-10-29_布引ハーブ�
 - [ ] Amazon フォト Android 版のフォルダ選択 UI（機種・バージョンで表記が違う）
 - [ ] Synology Photos / Amazon フォトが XMP の キーワード・Rating を読むか
 
+## 0.2.0 で増えた入口と出口
+
+```
+入口                                         出口
+DCIM/Camera ─────────────┐                   ┌─ Amazon フォト・Synology Photos のバックアップ（フォルダ単位）
+DCIM/ThetaCamera/<フォルダ>/ ─┤   仕分け        ├─ NAS へ直接（File Station、Wi-Fi のとき）
+  （Theta Camera Hatch）      ├──────────▶ Hatch_* ┤   <アップ先>/<年>/<YYYY-MM-DD> <イベント>/
+USB（カメラ・GoPro・THETA・   │                   └─ みてね（共有ボタン）
+  カードリーダー）→ Hatch_Inbox ┘
+```
+
+- **Theta Camera Hatch**：撮影時のイベント・☆・タグ・コメント（`Documents/ThetaCamera/` の `.theta.json`・`.xmp`）を引き継ぐ。移すか、Camera に残してコピーかは設定で
+- **USB**：`Pictures/Hatch_Inbox/<機器>/` にコピー（元は消さない、取り込み済みは飛ばす）→ 未処理で仕分け
+- **NAS へ直接**：分類ごとのアップ先（既定：家族は `/photo`、メモ・記録は `/home/Photos/…`）。上げたら大きさを確かめる。端末からは消さない（消す役は保留）
+- **ビューア**：HEIF の clap どおりに切って表示、360° 写真は見回す
+
 ## 今後
 
-1. **PC 版（Windows / Mac）**：同じ Flutter コードで、GoPro の SD カードを仕分けて NAS にアップ。
+1. **PC 版（Windows / Mac）**：同じ Flutter コードで、GoPro の SD カードを仕分けて NAS にアップ（Android 版は 0.2.0 で USB 取り込み・NAS へ直接に対応）。
 2. **NAS 整理**：XMP を読んで `Family/2026/2026-10-29_布引ハーブ園/` に再配置。
 3. **Synology 連携**：File Station API（公式）でアップロード確認、Synology Photos API（非公式）でタグ/アルバムをミラー。
 4. **Obsidian ノート**：イベントごとに Markdown ノートを生成（下記）。
